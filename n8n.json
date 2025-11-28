@@ -1,0 +1,357 @@
+{
+  "name": "Manga Agent Scraper",
+  "nodes": [
+    {
+      "parameters": {
+        "path": "refresh",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        -200,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hours": 6
+            }
+          ]
+        }
+      },
+      "id": "schedule-trigger",
+      "name": "Schedule",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        -200,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "command": "cat /data_shared/reading_list.json"
+      },
+      "id": "read-file",
+      "name": "Read Data",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        0,
+        320
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "return JSON.parse(items[0].json.stdout);"
+      },
+      "id": "parse-json",
+      "name": "Parse JSON",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        200,
+        320
+      ]
+    },
+    {
+      "parameters": {
+        "batchSize": 1,
+        "options": {}
+      },
+      "id": "split-loop",
+      "name": "Split Loop",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        400,
+        320
+      ]
+    },
+    {
+      "parameters": {
+        "url": "http://scraper:8000/scrape",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "url",
+              "value": "={{ $('Split Loop').item.json.url }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "scraper-api",
+      "name": "Scraper API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        620,
+        180
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "number": [
+            {
+              "value1": "={{ $json.latest_chapter }}",
+              "operation": "larger",
+              "value2": "={{ $('Split Loop').item.json.last_read }}"
+            }
+          ]
+        }
+      },
+      "id": "check-update",
+      "name": "Check Update",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        840,
+        180
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "={\n  \"id\": \"{{ $('Split Loop').item.json.id }}\",\n  \"title\": \"{{ $('Split Loop').item.json.title }}\",\n  \"url\": \"{{ $('Split Loop').item.json.url }}\",\n  \"last_read\": {{ $('Split Loop').item.json.last_read }},\n  \"latest_available\": {{ $json.latest_chapter }},\n  \"thumbnail\": \"{{ $json.thumbnail || $('Split Loop').item.json.thumbnail }}\",\n  \"hype_message\": \"New Chapter {{ $json.latest_chapter }} is out!\"\n}",
+        "options": {}
+      },
+      "id": "update-item",
+      "name": "Update Item",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 2,
+      "position": [
+        1100,
+        80
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "={\n  \"id\": \"{{ $('Split Loop').item.json.id }}\",\n  \"title\": \"{{ $('Split Loop').item.json.title }}\",\n  \"url\": \"{{ $('Split Loop').item.json.url }}\",\n  \"last_read\": {{ $('Split Loop').item.json.last_read }},\n  \"latest_available\": {{ $json.latest_chapter }},\n  \"thumbnail\": \"{{ $json.thumbnail || $('Split Loop').item.json.thumbnail }}\",\n  \"hype_message\": \"Caught up\"\n}",
+        "options": {}
+      },
+      "id": "keep-item",
+      "name": "Keep Old Item",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 2,
+      "position": [
+        1100,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "amount": 4,
+        "unit": "seconds"
+      },
+      "id": "wait",
+      "name": "Wait",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1,
+      "position": [
+        1320,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Get the global \"Backpack\"\nconst staticData = getWorkflowStaticData('global');\n\n// If this is the very first book (Run Index 0), clean the backpack first\nif ($('Split Loop').context.currentRunIndex === 0) {\n  staticData.results = [];\n}\n\n// Put the current book into the backpack\nif (items[0].json && items[0].json.id) {\n  if (!staticData.results) staticData.results = [];\n  staticData.results.push(items[0].json);\n}\n\n// Pass the item along so the loop continues\nreturn items;"
+      },
+      "id": "collector",
+      "name": "Collector",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1540,
+        320
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Open the backpack\nconst staticData = getWorkflowStaticData('global');\nconst allItems = staticData.results || [];\n\n// Safety Check\nif (allItems.length === 0) {\n  return [{ json: { warning: \"List empty\" } }];\n}\n\n// Sort\nallItems.sort((a, b) => (a.id || \"\").localeCompare(b.id || \"\"));\n\n// Prepare File\nreturn [\n  {\n    json: { success: true, count: allItems.length },\n    binary: {\n      data: {\n        data: Buffer.from(JSON.stringify(allItems, null, 2)).toString('base64'),\n        mimeType: 'application/json',\n        fileName: 'reading_list.json'\n      }\n    }\n  }\n];"
+      },
+      "id": "finish-process",
+      "name": "Finish Process",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        600,
+        540
+      ]
+    },
+    {
+      "parameters": {
+        "fileSelector": "/data_shared/reading_list.json",
+        "options": {}
+      },
+      "id": "write-disk",
+      "name": "Write to Disk",
+      "type": "n8n-nodes-base.writeBinaryFile",
+      "typeVersion": 1,
+      "position": [
+        820,
+        540
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Read Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Schedule": {
+      "main": [
+        [
+          {
+            "node": "Read Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Data": {
+      "main": [
+        [
+          {
+            "node": "Parse JSON",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse JSON": {
+      "main": [
+        [
+          {
+            "node": "Split Loop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Loop": {
+      "main": [
+        [
+          {
+            "node": "Scraper API",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Finish Process",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Scraper API": {
+      "main": [
+        [
+          {
+            "node": "Check Update",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Update": {
+      "main": [
+        [
+          {
+            "node": "Update Item",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Keep Old Item",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Item": {
+      "main": [
+        [
+          {
+            "node": "Wait",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Keep Old Item": {
+      "main": [
+        [
+          {
+            "node": "Wait",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait": {
+      "main": [
+        [
+          {
+            "node": "Collector",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Collector": {
+      "main": [
+        [
+          {
+            "node": "Split Loop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Finish Process": {
+      "main": [
+        [
+          {
+            "node": "Write to Disk",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}
