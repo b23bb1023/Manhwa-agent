@@ -1,0 +1,20 @@
+[
+  {
+    "id": "Name",
+    "title": "Title of the manga",
+    "url": "https://asuracomic.net/series/Enter-your-custom-url",
+    "thumbnail": "",
+    "last_read": 200,
+    "latest_available": 0,
+    "hype_message": "Checking..."
+  },
+  {
+    "id": "Name-2",
+    "title": "Title of the manga-2",
+    "url": "https://asuracomic.net/series/Enter-your-custom-url",
+    "thumbnail": "",
+    "last_read": 200,
+    "latest_available": 0,
+    "hype_message": "Checking..."
+  }
+]
