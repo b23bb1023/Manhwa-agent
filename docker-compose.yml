@@ -1,0 +1,27 @@
+version: '3.8'
+
+services:
+  # The Brain
+  n8n:
+    image: n8nio/n8n:latest
+    ports:
+      - "5678:5678"
+    volumes:
+      - ./n8n_data:/home/node/.n8n
+      - ./data:/data_shared  # Shared volume for JSON file
+    environment:
+      - N8N_SECURE_COOKIE=false
+    networks:
+      - manga_net
+
+  # The Scraper Tool
+  scraper:
+    build: ./scraper
+    ports:
+      - "8000:8000"
+    networks:
+      - manga_net
+    restart: unless-stopped
+
+networks:
+  manga_net:
