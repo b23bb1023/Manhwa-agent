@@ -2,7 +2,7 @@
 
 A local reading-list prototype that combines a Playwright scraper, an n8n workflow, and a Flet desktop dashboard to track chapter availability and reading progress.
 
-**Status: integration work required.** The committed checkout is not a working end-to-end installation: Compose expects files in directories that are not present, and the exported workflow has execution defects. The scraper also needs access controls before network exposure. See [the improvement plan](improvement_repo.md) for ordered tasks and acceptance checks.
+**Status: integration work required.** The committed checkout is not a working end-to-end installation: Compose expects files in directories that are not present, and the exported workflow has execution defects. The scraper also needs access controls before network exposure. The known limitations below describe the current behavior.
 
 ## Components
 
@@ -66,7 +66,7 @@ For development, the intended prerequisites are Docker with Compose, Python, and
 | Scraper image | `Dockerfile` | `mcr.microsoft.com/playwright/python:v1.48.0-jammy` |
 | n8n image | `docker-compose.yml` | Floating `n8nio/n8n:latest`; no tested release is pinned |
 
-The current Compose configuration publishes host ports `5678` and `8000` without a loopback binding and sets `N8N_SECURE_COOKIE=false`. The scraper accepts caller-supplied destinations without authentication or destination restrictions. Do not treat this configuration as ready for remote access. The [first improvement task](improvement_repo.md#1-restrict-scraper-access-and-destinations) describes the required boundary.
+The current Compose configuration publishes host ports `5678` and `8000` without a loopback binding and sets `N8N_SECURE_COOKIE=false`. The scraper accepts caller-supplied destinations without authentication or destination restrictions. Do not treat this configuration as ready for remote access. Before exposing the service, restrict callers and destinations, authenticate requests, and bound browser resources.
 
 ## Reading-list format
 
@@ -104,7 +104,7 @@ After repairing setup, pinning dependencies, and initializing the data file, the
 | --- | --- |
 | Compose cannot find the build context | `./scraper` is missing; reconcile the checkout paths before building. |
 | Dashboard shows **No Data** | Missing file, malformed JSON, or a non-list value all appear as an empty list. Validate the file and preserve a backup before editing. |
-| Workflow never updates entries | Repair the loop outputs, versioned node parameters, helper calls, and writer configuration described in the improvement plan. |
+| Workflow never updates entries | Repair the loop outputs, versioned node parameters, helper calls, and writer configuration before treating the export as a working workflow. |
 | Latest availability becomes zero | Navigation/parse failures can currently produce chapter zero. Preserve the previous cache until failure handling is implemented. |
 | Progress reverts after a refresh | Whole-file writes from n8n and the widget can overwrite one another. Avoid concurrent writers until transactional updates exist. |
 | Dashboard hangs on reload | Thumbnail downloads block rendering; an image failure is not evidence that the list file is broken. |
@@ -113,7 +113,7 @@ Rebuilding the same pinned Playwright image is not a general fix for a changed s
 
 ## Contributing and release readiness
 
-Start with [improvement_repo.md](improvement_repo.md). Proposed behavior changes should include offline fixtures, preserve reading progress, and state the exact dependency versions tested. A release should pass the clean-checkout, workflow, persistence, and request-boundary checks listed there.
+Proposed behavior changes should include offline fixtures, preserve reading progress, and state the exact dependency versions tested. Before release, demonstrate a clean-checkout startup, correct two-item workflow execution, preservation of concurrent progress updates and failed-scrape state, and rejection of unauthorized or forbidden scraper requests.
 
 The repository currently contains no test suite or CI workflow. Documentation updates do not establish that the implementation defects are fixed.
 
